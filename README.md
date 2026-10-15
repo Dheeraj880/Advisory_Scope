@@ -1,5 +1,7 @@
 # advisory-scope
 
+[![ci](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml/badge.svg)](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml)
+
 **Vendor advisory or CISA KEV entry → validated affected-version scope (strict JSON) → per-asset verdicts.**
 
 An LLM reads the advisory and proposes the affected products and version ranges. A deterministic validator decides whether to believe it. Validated ranges are matched against an internet-asset corpus. The tool separates *product identified* from *vulnerability confirmed* and reports precision and recall against lab ground truth.
@@ -43,10 +45,26 @@ Running both readings against the same labeled asset corpus (`scripts/demo_offli
 
 Every in-range firewall comes back `NEEDS_CONFIG_CHECK`, not `VULNERABLE`. The advisory only applies when a GlobalProtect gateway or portal is configured, and that isn't observable from the internet. Validation can't tell these two readings apart, because both are grounded. The golden-record diff and lab ground truth can, and that's why both exist (see [docs/DESIGN.md](docs/DESIGN.md)).
 
+## Live results (Claude Opus 5.5, Oct 15 2026)
+
+`scripts/eval_golden.sh` against hand-checked golden records. Precision / recall per field:
+
+| CVE | First-attempt pass | Affected products | Ranges | Not-affected |
+|---|---|---|---|---|
+| CVE-2024-3400 (PAN-OS) | yes, on 2 separate runs | 1.0 / 1.0 | **1.0 / 1.0** (18 of 18 hotfix ranges) | 0.67 / 0.67 * |
+| CVE-2023-4966 (Citrix Bleed) | yes | 1.0 / 1.0 (incl. FIPS and NDcPP editions) | **1.0 / 1.0** (incl. 12.1 EOL branch) | 1.0 / 1.0 |
+| CVE-2023-34362 (MOVEit) | yes | 1.0 / 1.0 | **1.0 / 1.0** | n/a |
+
+\* A naming mismatch, not a wrong answer. The model wrote "Panorama appliances", which is verbatim from the advisory, and the golden record says "Panorama". Exact-match scoring measures string identity, which is why product identity (CPE / aliases) has to be solved before detector metrics mean anything.
+
+Against Palo Alto's live advisory page, the extracted PAN-OS record scored precision 1.0 / recall 1.0 on the labeled asset corpus, with zero false positives on patched hotfix builds.
+
+The first live runs also caught two integration bugs the offline tests couldn't: current models reject forced `tool_choice`, and asking the model for a constant (`schema_version`) burned every repair attempt. Both are fixed and covered by tests. See [docs/DESIGN.md](docs/DESIGN.md).
+
 ## Quickstart
 
 ```bash
-git clone https://github.com/<you>/advisory-scope && cd advisory-scope
+git clone https://github.com/Dheeraj880/Advisory_Scope && cd Advisory_Scope
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
