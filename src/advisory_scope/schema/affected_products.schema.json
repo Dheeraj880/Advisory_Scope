@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/advisory-scope/schema/affected_products.schema.json",
+  "title": "AffectedProductsRecord",
+  "description": "Affected-product scope extracted from one security advisory or KEV entry. Every claim is tied to verbatim evidence from the source.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cve_ids", "affected", "not_affected", "extraction_notes"],
+  "properties": {
+    "schema_version": {
+      "description": "Set by advisory-scope, not by the model.",
+      "type": "string",
+      "const": "1.0"
+    },
+    "cve_ids": {
+      "description": "CVE identifiers covered by this record, exactly as they appear in the source.",
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^CVE-\\d{4}-\\d{4,7}$"
+      }
+    },
+    "affected": {
+      "description": "One entry per distinct affected product or edition. Never list the same vendor+product twice.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/affected_product" }
+    },
+    "not_affected": {
+      "description": "Products the source explicitly says are NOT affected. Unaffected release lines of an affected product belong in that product's ranges, not here.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/not_affected_product" }
+    },
+    "extraction_notes": {
+      "description": "Ambiguities, gaps, or assumptions. Use this instead of guessing.",
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    }
+  },
+  "$defs": {
+    "affected_product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "product", "version_scheme", "ranges", "versions", "conditions", "evidence"],
+      "properties": {
+        "vendor": { "type": "string", "minLength": 1 },
+        "product": {
+          "description": "Product or edition name as written in the source, e.g. 'PAN-OS' or 'NetScaler ADC 13.1-FIPS'.",
+          "type": "string",
+          "minLength": 1
+        },
+        "version_scheme": {
+          "description": "dotted: numeric vendor versions incl. hotfix/build suffixes (10.2.9-h1, 13.1-49.15). semver: strict MAJOR.MINOR.PATCH. opaque: no reliable ordering; ranges must be empty.",
+          "type": "string",
+          "enum": ["dotted", "semver", "opaque"]
+        },
+        "ranges": {
+          "description": "Half-open affected ranges, one per release line.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/version_range" }
+        },
+        "versions": {
+          "description": "Explicitly enumerated affected versions not expressed as a range.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "conditions": {
+          "description": "Configuration or deployment prerequisites for exposure stated in the source. Empty if none stated.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "evidence": {
+          "description": "Verbatim quotes (contiguous spans copied from the source) supporting this entry.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 8 }
+        }
+      }
+    },
+    "version_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["introduced", "fixed", "last_affected", "branch"],
+      "properties": {
+        "introduced": {
+          "description": "First affected version (inclusive). \"0\" means every earlier version.",
+          "type": "string",
+          "minLength": 1
+        },
+        "fixed": {
+          "description": "First non-affected version (exclusive). Null if no fix is named.",
+          "type": ["string", "null"]
+        },
+        "last_affected": {
+          "description": "Last affected version (inclusive), used only when no fix is named. Never set together with fixed.",
+          "type": ["string", "null"]
+        },
+        "branch": {
+          "description": "Release line this range is confined to (e.g. \"12.1\" for an end-of-life line where every build is affected). Null if the bounds alone are enough.",
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "not_affected_product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendor", "product", "evidence"],
+      "properties": {
+        "vendor": { "type": "string", "minLength": 1 },
+        "product": { "type": "string", "minLength": 1 },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 8 }
+        }
+      }
+    }
+  }
+}
