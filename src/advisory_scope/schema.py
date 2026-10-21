@@ -15,7 +15,7 @@ from __future__ import annotations
 import copy
 import json
 from functools import lru_cache
-from importlib import resources
+from importlib import resources  # nosemgrep: python37-compatibility-importlib2 -- requires-python >= 3.10
 from typing import Any
 
 SCHEMA_RESOURCE = ("advisory_scope", "schema/affected_products.schema.json")

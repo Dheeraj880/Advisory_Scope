@@ -1,6 +1,6 @@
 # advisory-scope
 
-[![ci](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml/badge.svg)](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml)
+[![ci](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml/badge.svg)](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/ci.yml) [![codeql](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/codeql.yml/badge.svg)](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/codeql.yml) [![semgrep](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/semgrep.yml/badge.svg)](https://github.com/Dheeraj880/Advisory_Scope/actions/workflows/semgrep.yml)
 
 **Vendor advisory or CISA KEV entry → validated affected-version scope (strict JSON) → per-asset verdicts.**
 
@@ -152,6 +152,28 @@ The schema is [`src/advisory_scope/schema/affected_products.schema.json`](src/ad
 ## Use it from Claude Code
 
 `.claude/skills/advisory-scope/SKILL.md` ships with the repo. Open the repo in Claude Code and ask it to scope a CVE. In this mode Claude does the extraction itself, and the record isn't done until `advisory-scope validate` exits 0.
+
+## Security
+
+Every push and pull request runs three security workflows, and findings land in the repo's **Security → Code scanning** tab as SARIF.
+
+| Workflow | What it does |
+|---|---|
+| [`codeql.yml`](.github/workflows/codeql.yml) | CodeQL `security-extended` queries on the Python source **and** on the GitHub Actions workflows |
+| [`semgrep.yml`](.github/workflows/semgrep.yml) | Semgrep community rulesets (`p/python`, `p/secrets`, `p/github-actions`) plus this project's own rules, uploaded as SARIF |
+| [`dependabot.yml`](.github/dependabot.yml) | Weekly grouped updates for Python dependencies and for the pinned Actions |
+
+**Custom Semgrep rules** ([`.semgrep/advisory-scope.yml`](.semgrep/advisory-scope.yml)) encode this tool's trust boundary, so a future change can't quietly break it. Each rule has positive and negative test cases ([`.semgrep/advisory-scope.py`](.semgrep/advisory-scope.py)), CI runs `semgrep --test` first, and any finding from these rules fails the build:
+
+- **`advscope-model-record-not-validated`** — a record taken from the model's tool call must pass `validate_record()` before it is used. This is the core invariant of the tool.
+- **`advscope-untrusted-text-to-dangerous-sink`** (taint) — text from a fetched advisory, the KEV feed or the model's tool call must never reach `eval`/`exec`, `subprocess`, unsafe deserialization or a filesystem path. Vendor pages can carry prompt injection.
+- **`advscope-tls-verification-disabled`** — advisory and KEV fetches must verify TLS, since the data decides exposure verdicts.
+
+**Supply chain:** every third-party Action is pinned to a full commit SHA (Dependabot keeps the pins current), workflows default to `contents: read`, and checkouts don't persist credentials. The first Semgrep scan flagged the mutable `@v4`-style tags; pinning them is what fixed it.
+
+**Triage:** community-rule false positives are suppressed inline with a `# nosemgrep: <rule> -- <reason>` comment, so every suppression is reviewable in the diff.
+
+See [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## Limitations
 

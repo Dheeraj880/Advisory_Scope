@@ -126,6 +126,7 @@ class ValidationReport:
     def feedback(self) -> str:
         """Message returned to the model when validation fails."""
         lines = [
+            # nosemgrep: string-concat-in-list -- intentional implicit concatenation of one long string
             (
                 "Deterministic validation rejected the record. Fix exactly these "
                 "errors and call the tool again with the complete corrected record. "
