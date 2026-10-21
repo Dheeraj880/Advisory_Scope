@@ -1,0 +1,59 @@
+# Semgrep SAST.
+#   1. Unit-test the project's custom rules (.semgrep/), so a rule can't silently stop matching.
+#   2. Scan with community rulesets + the custom rules and upload SARIF to the Security tab.
+#   3. Gate: any custom-rule finding fails the build. Community findings are triaged in the
+#      Security tab instead of blocking merges.
+name: semgrep
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - run: pip install "semgrep==1.182.0"
+
+      - name: Test the custom rules
+        run: semgrep --test --config .semgrep/advisory-scope.yml .semgrep/advisory-scope.py
+
+      - name: Scan (community rulesets + custom rules) to SARIF
+        run: >-
+          semgrep scan --metrics off --exclude .semgrep
+          --config p/python --config p/secrets --config p/github-actions
+          --config .semgrep/advisory-scope.yml
+          --sarif --output semgrep.sarif
+
+      - name: Drop findings already triaged in source
+        # Semgrep keeps `nosemgrep`-suppressed findings in SARIF; code scanning would
+        # alert on them anyway. The suppression comment (with its reason) is the record.
+        run: jq '(.runs[].results) |= map(select((.suppressions // []) | length == 0))' semgrep.sarif > semgrep.filtered.sarif && mv semgrep.filtered.sarif semgrep.sarif
+
+      - name: Upload SARIF to code scanning
+        # Pull requests from forks get a read-only token and cannot upload.
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+      - name: Gate on the project's security invariants
+        run: semgrep scan --metrics off --exclude .semgrep --config .semgrep/advisory-scope.yml --error

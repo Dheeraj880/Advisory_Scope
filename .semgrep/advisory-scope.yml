@@ -1,0 +1,99 @@
+# Project-specific Semgrep rules for advisory-scope's trust boundaries. Test cases live
+# in advisory-scope.py (run: semgrep --test --config .semgrep/advisory-scope.yml .semgrep/advisory-scope.py).
+rules:
+  - id: advscope-model-record-not-validated
+    languages: [python]
+    severity: ERROR
+    message: >-
+      `$RECORD` comes from the model's tool call but is never passed to validate_record().
+      The model is reading attacker-reachable vendor pages, so its output is untrusted until
+      the deterministic validator has checked it against the source text.
+    metadata:
+      category: security
+      cwe: "CWE-20: Improper Input Validation"
+      owasp: "LLM05:2025 Improper Output Handling"
+      confidence: HIGH
+    patterns:
+      - pattern-inside: |
+          def $FUNC(...):
+            ...
+      - pattern-either:
+          - pattern: $RECORD = $CALL.input
+          - pattern: $RECORD = $CALL.input if $COND else $ALT
+          - pattern: $RECORD = json.loads($CALL.input)
+      - pattern-not-inside: |
+          def $FUNC(...):
+            ...
+            $RECORD = $X
+            ...
+            $REPORT = validate_record($RECORD, ...)
+            ...
+      - pattern-not-inside: |
+          def $FUNC(...):
+            ...
+            for $I in $ITER:
+              ...
+              $RECORD = $X
+              ...
+              $REPORT = validate_record($RECORD, ...)
+              ...
+      - pattern-not-inside: |
+          def $FUNC(...):
+            ...
+            for $I in $ITER:
+              ...
+              $RECORD = $X
+              $RECORD = $Y
+              ...
+              $REPORT = validate_record($RECORD, ...)
+              ...
+
+  - id: advscope-untrusted-text-to-dangerous-sink
+    mode: taint
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Text from a fetched advisory, the KEV feed or the model's tool call reaches a code
+      execution, deserialization or filesystem sink. Advisory pages can carry prompt
+      injection, so this content must never be executed, deserialized or used as a path.
+    metadata:
+      category: security
+      cwe: "CWE-94: Improper Control of Generation of Code"
+      owasp: "LLM01:2025 Prompt Injection"
+      confidence: MEDIUM
+    pattern-sources:
+      - pattern: _http_get(...)
+        exact: true
+      - pattern: load_document(...)
+        exact: true
+      - pattern: $CALL.input
+        exact: true
+    pattern-sinks:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(...)
+      - pattern: os.system(...)
+      - pattern: os.popen(...)
+      - pattern: subprocess.$FN(...)
+      - pattern: pickle.loads(...)
+      - pattern: marshal.loads(...)
+      - patterns:
+          - pattern: yaml.load(...)
+          - pattern-not: yaml.load(..., Loader=yaml.SafeLoader)
+      - pattern: open($PATH, ...)
+      - pattern: Path($PATH)
+
+  - id: advscope-tls-verification-disabled
+    languages: [python]
+    severity: ERROR
+    message: >-
+      TLS certificate verification is disabled. Advisory and KEV data drive the
+      exposure verdicts; an on-path attacker could rewrite affected-version ranges.
+    metadata:
+      category: security
+      cwe: "CWE-295: Improper Certificate Validation"
+      confidence: HIGH
+    pattern-either:
+      - pattern: httpx.$METHOD(..., verify=False, ...)
+      - pattern: httpx.Client(..., verify=False, ...)
+      - pattern: httpx.AsyncClient(..., verify=False, ...)

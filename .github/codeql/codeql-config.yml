@@ -1,0 +1,4 @@
+name: codeql-config
+# .semgrep/ holds deliberately vulnerable test cases for the custom Semgrep rules.
+paths-ignore:
+  - .semgrep
