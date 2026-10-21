@@ -42,6 +42,11 @@ jobs:
           --config .semgrep/advisory-scope.yml
           --sarif --output semgrep.sarif
 
+      - name: Drop findings already triaged in source
+        # Semgrep keeps `nosemgrep`-suppressed findings in SARIF; code scanning would
+        # alert on them anyway. The suppression comment (with its reason) is the record.
+        run: jq '(.runs[].results) |= map(select((.suppressions // []) | length == 0))' semgrep.sarif > semgrep.filtered.sarif && mv semgrep.filtered.sarif semgrep.sarif
+
       - name: Upload SARIF to code scanning
         # Pull requests from forks get a read-only token and cannot upload.
         if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
